@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recon — Precision highlight capture, entirely local</title>
+<meta name="description" content="Recon watches your Fortnite match locally and preserves the moments that matter. No cloud, no account, nothing leaves your machine.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0a0a0a;
+    --bg-panel: #111111;
+    --ink: #f5f5f3;
+    --ink-muted: #8d8d8a;
+    --ink-faint: #4a4a48;
+    --accent: #ff3b2f;
+    --line: rgba(245,245,243,0.1);
+    --line-strong: rgba(245,245,243,0.18);
+    --font-display: 'Instrument Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+
+  *{ box-sizing: border-box; }
+  html{ scroll-behavior: smooth; }
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-display);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  a{ color: inherit; }
+  ::selection{ background: var(--accent); color: var(--bg); }
+  :focus-visible{ outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .wrap{ max-width: 1200px; margin: 0 auto; padding: 0 32px; }
+
+  h1,h2,h3{ font-family: var(--font-display); font-weight: 600; margin: 0; letter-spacing: -0.02em; }
+
+  .eyebrow{
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .eyebrow::before{ content:""; width: 6px; height: 6px; background: var(--accent); display: inline-block; border-radius: 50%; }
+
+  /* ---------- header ---------- */
+  header{
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(10,10,10,0.85);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line);
+  }
+  header .bar{ display:flex; align-items:center; justify-content: space-between; padding: 20px 32px; }
+  .wordmark{
+    font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: -0.01em;
+    text-decoration: none; display: flex; align-items: center; gap: 8px;
+  }
+  .wordmark::before{ content:""; width: 8px; height: 8px; background: var(--accent); border-radius: 50%; display: inline-block; }
+
+  .btn{
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 24px;
+    border-radius: 2px;
+    border: 1px solid var(--ink);
+    color: var(--bg);
+    background: var(--ink);
+    position: relative;
+    transition: background .2s ease, color .2s ease, border-color .2s ease, transform .15s ease, box-shadow .3s ease;
+  }
+  .btn:hover{ background: var(--accent); border-color: var(--accent); color: var(--bg); transform: translateY(-2px); box-shadow: 0 10px 30px -8px rgba(255,59,47,0.55); }
+  .btn:active{ transform: translateY(0) scale(0.97); }
+  .btn.ghost{ background: transparent; color: var(--ink); border-color: var(--line-strong); }
+  .btn.ghost:hover{ background: transparent; border-color: var(--ink); color: var(--ink); box-shadow: none; }
+  header .btn{ padding: 10px 20px; font-size: 10px; }
+
+  /* ---------- hero: minimal first view ---------- */
+  .hero{
+    min-height: calc(100vh - 73px);
+    display: flex;
+    align-items: center;
+    padding: 60px 0;
+  }
+  .hero-inner{ max-width: 720px; }
+
+  .hero-badge{
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    border: 1px solid var(--line-strong);
+    padding: 7px 14px;
+    border-radius: 100px;
+    margin-bottom: 32px;
+    opacity: 0;
+    transform: translateY(10px);
+    animation: rise .7s ease forwards;
+  }
+  .hero-badge .dot{ width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: blink 1.6s ease-in-out infinite; }
+
+  .hero h1{
+    font-size: clamp(46px, 7vw, 84px);
+    line-height: 0.98;
+    font-weight: 600;
+    color: var(--ink);
+    opacity: 0;
+    transform: translateY(16px);
+    animation: rise .8s ease forwards;
+    animation-delay: .1s;
+  }
+  .hero h1 .thin{ font-weight: 300; color: var(--ink-muted); }
+
+  .hero-cycle{
+    height: 24px;
+    margin: 26px 0 40px;
+    opacity: 0;
+    transform: translateY(14px);
+    animation: rise .8s ease forwards;
+    animation-delay: .22s;
+  }
+  .hero-cycle span{
+    font-family: var(--font-mono);
+    font-size: 15px;
+    color: var(--ink-muted);
+    display: block;
+    transition: opacity .35s ease, transform .35s ease;
+  }
+  .hero-cycle span.out{ opacity: 0; transform: translateY(-8px); }
+  .hero-cycle span.in{ opacity: 1; transform: translateY(0); }
+
+  .hero-ctas{
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    opacity: 0;
+    transform: translateY(14px);
+    animation: rise .8s ease forwards;
+    animation-delay: .34s;
+  }
+
+  @keyframes rise{ to{ opacity: 1; transform: translateY(0); } }
+  @keyframes blink{ 0%,100%{ opacity:1; } 50%{ opacity:.25; } }
+
+  .scroll-cue{
+    position: absolute;
+    left: 50%;
+    bottom: 34px;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    opacity: 0;
+    animation: rise .8s ease forwards;
+    animation-delay: .55s;
+  }
+  .scroll-cue .chevron{
+    width: 14px; height: 14px;
+    border-right: 1px solid var(--ink-faint);
+    border-bottom: 1px solid var(--ink-faint);
+    transform: rotate(45deg);
+    animation: bob 1.8s ease-in-out infinite;
+  }
+  @keyframes bob{ 0%,100%{ transform: rotate(45deg) translate(0,0); } 50%{ transform: rotate(45deg) translate(4px,4px); } }
+
+  .hero-wrap{ position: relative; }
+
+  /* ---------- sections shared ---------- */
+  section{ padding: 110px 0; border-top: 1px solid var(--line); }
+  .section-head{ max-width: 54ch; margin-bottom: 64px; }
+  .section-head h2{ font-size: clamp(30px, 3.6vw, 42px); font-weight: 600; color: var(--ink); line-height: 1.1; }
+  .section-head h2 .thin{ font-weight: 300; color: var(--ink-muted); }
+  .section-head p{ color: var(--ink-muted); font-size: 15.5px; line-height: 1.7; margin-top: 16px; }
+
+  .reveal{ opacity: 0; transform: translateY(22px) scale(.985); transition: opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1); }
+  .reveal.in{ opacity: 1; transform: translateY(0) scale(1); }
+
+  /* ---------- how it works ---------- */
+  .beats{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .beat{ background: var(--bg); padding: 40px 30px 0 0; transition: transform .3s ease; }
+  .beat:hover{ transform: translateY(-4px); }
+  .beat .numeral{ font-family: var(--font-mono); font-size: 12px; color: var(--accent); display: block; margin-bottom: 30px; }
+  .beat h3{ font-size: 19px; font-weight: 600; margin-bottom: 12px; }
+  .beat p{ font-size: 14.5px; color: var(--ink-muted); line-height: 1.7; margin: 0; }
+
+  /* ---------- capture demo (repurposed signature element) ---------- */
+  .demo-module{
+    border: 1px solid var(--line-strong);
+    background: var(--bg-panel);
+    padding: 40px 36px 32px;
+  }
+  .demo-row{ display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 24px; }
+  .demo-row + .demo-row{ margin-top: 34px; }
+  .demo-label{
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .raw-track{
+    position: relative;
+    height: 2px;
+    background: var(--line-strong);
+  }
+  .playhead{
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 2px;
+    height: 14px;
+    background: var(--ink);
+    box-shadow: 0 0 10px 1px rgba(255,59,47,0.5);
+    transform: translate(-1px, -50%);
+  }
+  .marker{
+    position: absolute;
+    top: 50%;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--ink-faint);
+    transform: translate(-50%, -50%);
+    transition: background .25s ease, box-shadow .25s ease;
+  }
+  .marker.hit{ background: var(--accent); box-shadow: 0 0 12px 2px rgba(255,59,47,0.55); }
+  .marker-tag{
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translate(-50%, 4px);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity .3s ease, transform .3s ease;
+  }
+  .marker.hit .marker-tag{ opacity: 1; transform: translate(-50%, 0); }
+
+  .clip-tray{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .clip-slot{
+    border: 1px dashed var(--line-strong);
+    padding: 14px 10px;
+    text-align: center;
+    transition: border-color .3s ease, background .3s ease, transform .3s ease;
+  }
+  .clip-slot .clip-tag{
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--ink-faint);
+    transition: color .3s ease;
+  }
+  .clip-slot.filled{
+    border-style: solid;
+    border-color: var(--accent);
+    background: rgba(255,59,47,0.08);
+    transform: translateY(-2px);
+  }
+  .clip-slot.filled .clip-tag{ color: var(--ink); }
+
+  .demo-caption{
+    margin-top: 30px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    line-height: 1.7;
+  }
+
+  /* ---------- why different ---------- */
+  .compare{ display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
+  .compare > div{ padding: 40px 40px 0 0; }
+  .compare .them{ border-right: 1px solid var(--line); }
+  .compare .us{ padding-left: 40px; }
+  .compare h4{ font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; margin: 0 0 26px; color: var(--ink-faint); }
+  .compare .us h4{ color: var(--accent); }
+  .compare ul{ list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 18px; }
+  .compare li{ font-size: 15px; line-height: 1.6; color: var(--ink-muted); padding-left: 16px; position: relative; transition: transform .25s ease; }
+  .compare li:hover{ transform: translateX(3px); }
+  .compare li::before{ content:"—"; position:absolute; left:0; color: var(--ink-faint); }
+  .compare .us li{ color: var(--ink); }
+  .compare .us li::before{ content:"—"; color: var(--accent); }
+
+  /* ---------- performance ---------- */
+  .perf{ display:grid; grid-template-columns: 0.9fr 1.1fr; gap: 60px; align-items: start; }
+  .stat-grid{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .stat{ background: var(--bg); padding: 26px 22px; transition: transform .3s ease; }
+  .stat:hover{ transform: translateY(-4px); }
+  .stat .label{ font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 14px; }
+  .stat .num{ font-size: 32px; font-weight: 300; color: var(--ink); line-height: 1; }
+  .stat .num .accent{ color: var(--accent); }
+  .stat .bar{ margin-top: 16px; height: 2px; background: var(--line-strong); position: relative; }
+  .stat .bar > span{ position:absolute; top:0; left:0; height:100%; background: var(--accent); width: 0%; transition: width 1.2s cubic-bezier(.2,.8,.2,1); }
+  .perf-copy p{ color: var(--ink-muted); font-size: 16px; line-height: 1.75; }
+
+  /* ---------- privacy ---------- */
+  .privacy{ max-width: 66ch; }
+  .privacy .statement{ font-size: clamp(24px, 3vw, 32px); font-weight: 600; color: var(--ink); line-height: 1.35; margin: 0 0 28px; letter-spacing: -0.01em; }
+  .privacy p{ font-size: 15.5px; line-height: 1.75; color: var(--ink-muted); margin: 0 0 16px; }
+  .privacy p:last-child{ margin-bottom: 0; }
+
+  /* ---------- footer ---------- */
+  footer{ padding: 130px 0 70px; border-top: 1px solid var(--line); text-align: center; }
+  footer h2{ font-size: clamp(34px, 5vw, 56px); font-weight: 600; margin-bottom: 22px; letter-spacing: -0.02em; }
+  footer h2 .thin{ font-weight: 300; color: var(--ink-muted); }
+  footer p.sub{ color: var(--ink-muted); max-width: 42ch; margin: 0 auto 40px; line-height: 1.7; font-size: 15.5px; }
+  .btn.big{ font-size: 12px; padding: 18px 40px; }
+  .reqs{ margin-top: 56px; display: flex; justify-content: center; gap: 56px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted); }
+  .reqs div span{ display:block; color: var(--ink-faint); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 6px; }
+  .foot-fine{ margin-top: 70px; font-size: 11px; color: var(--ink-faint); font-family: var(--font-mono); letter-spacing: 0.04em; }
+
+  @media (max-width: 880px){
+    .beats{ grid-template-columns: 1fr; }
+    .beat{ padding-right: 0; }
+    .compare{ grid-template-columns: 1fr; }
+    .compare .them{ border-right: none; border-bottom: 1px solid var(--line); padding-bottom: 40px; }
+    .compare .us{ padding-left: 0; }
+    .perf{ grid-template-columns: 1fr; }
+    .stat-grid{ grid-template-columns: 1fr; }
+    .reqs{ gap: 30px 48px; }
+    .demo-row{ grid-template-columns: 1fr; gap: 12px; }
+    .clip-tray{ grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation: none !important; transition: none !important; }
+    html{ scroll-behavior: auto; }
+    .hero-badge, .hero h1, .hero-cycle, .hero-ctas, .scroll-cue{ opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar wrap">
+    <a href="#top" class="wordmark">RECON</a>
+    <a href="#download" class="btn">Download</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <div class="hero-wrap">
+    <section class="hero">
+      <div class="wrap">
+        <div class="hero-inner">
+          <div class="hero-badge"><span class="dot"></span>100% local — nothing leaves your PC</div>
+          <h1>Fortnite <span class="thin">clip recorder.</span></h1>
+          <div class="hero-cycle"><span id="cycleText" class="in">Auto-detects Victory Royales.</span></div>
+          <div class="hero-ctas">
+            <a href="#download" class="btn">Download, free</a>
+          </div>
+        </div>
+      </div>
+      <div class="scroll-cue"><span>Scroll</span><span class="chevron"></span></div>
+    </section>
+  </div>
+
+  <section id="demo">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <div class="eyebrow">See it work</div>
+        <h2>Every match, split into what matters — <span class="thin">automatically.</span></h2>
+        <p>Recon watches the full session in the background. The moment something worth keeping happens, it's pulled out and saved as its own clip.</p>
+      </div>
+
+      <div class="demo-module reveal">
+        <div class="demo-row">
+          <span class="demo-label">Raw session</span>
+          <div class="raw-track" id="rawTrack">
+            <div class="playhead" id="playhead"></div>
+            <div class="marker" style="left:15%" data-index="0"><span class="marker-tag">Elim</span></div>
+            <div class="marker" style="left:40%" data-index="1"><span class="marker-tag">Build</span></div>
+            <div class="marker" style="left:65%" data-index="2"><span class="marker-tag">Close call</span></div>
+            <div class="marker" style="left:88%" data-index="3"><span class="marker-tag">Victory</span></div>
+          </div>
+        </div>
+        <div class="demo-row">
+          <span class="demo-label">Saved clips</span>
+          <div class="clip-tray">
+            <div class="clip-slot" data-slot="0"><span class="clip-tag">Elim</span></div>
+            <div class="clip-slot" data-slot="1"><span class="clip-tag">Build</span></div>
+            <div class="clip-slot" data-slot="2"><span class="clip-tag">Close call</span></div>
+            <div class="clip-slot" data-slot="3"><span class="clip-tag">Victory</span></div>
+          </div>
+        </div>
+        <p class="demo-caption">Top: the full match, playing out in real time. Bottom: what actually gets saved to your drive — nothing more.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <div class="eyebrow">How it works</div>
+        <h2>Three things happen, <span class="thin">automatically,</span> every match.</h2>
+      </div>
+      <div class="beats reveal">
+        <div class="beat">
+          <span class="numeral">01</span>
+          <h3>Watches locally</h3>
+          <p>Recon runs beside Fortnite and reads what's already on your screen. It never touches the network.</p>
+        </div>
+        <div class="beat">
+          <span class="numeral">02</span>
+          <h3>Detects the moment</h3>
+          <p>Eliminations, Victory Royales, storm-close calls, and key builds are recognized as they happen.</p>
+        </div>
+        <div class="beat">
+          <span class="numeral">03</span>
+          <h3>Saves the clip</h3>
+          <p>The moment is trimmed and written to disk, ready to open, share, or drop into an editor.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="different">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <div class="eyebrow">Why it's different</div>
+        <h2>Built for one game, running on <span class="thin">one machine — yours.</span></h2>
+      </div>
+      <div class="compare reveal">
+        <div class="them">
+          <h4>Generic clippers</h4>
+          <ul>
+            <li>Cloud processing, often with an account required to get your own clips back</li>
+            <li>Multi-game detection tuned for no game in particular</li>
+            <li>Noticeable overhead while you're trying to play at your best</li>
+          </ul>
+        </div>
+        <div class="us">
+          <h4>Recon</h4>
+          <ul>
+            <li>Fully offline — capture, detection, and storage never leave your PC</li>
+            <li>Detection tuned specifically to Fortnite's elim feed, Victory Royale screen, and storm moments</li>
+            <li>Built to run alongside the game without costing you frames</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="performance">
+    <div class="wrap perf">
+      <div class="perf-copy reveal">
+        <div class="eyebrow">Performance</div>
+        <h2>Runs <span class="thin">under</span> the game, not against it.</h2>
+        <p>Recon is built to sit beside Fortnite without costing you frames. It does one job — watching for a highlight — and nothing else runs while it waits.</p>
+      </div>
+      <!-- DEVELOPER: figures below (0.8%, 62 MB, <1 fps) are placeholders — replace with real measured benchmarks before shipping -->
+      <div class="stat-grid reveal">
+        <div class="stat">
+          <div class="label">CPU overhead</div>
+          <div class="num"><span class="accent" data-final="0.8" data-decimals="1">0.0</span>%</div>
+          <div class="bar"><span data-target="8"></span></div>
+        </div>
+        <div class="stat">
+          <div class="label">RAM footprint</div>
+          <div class="num"><span class="accent" data-final="62" data-decimals="0">0</span> MB</div>
+          <div class="bar"><span data-target="12"></span></div>
+        </div>
+        <div class="stat">
+          <div class="label">Frame impact</div>
+          <div class="num">&lt;<span class="accent" data-final="1" data-decimals="0">0</span> fps</div>
+          <div class="bar"><span data-target="4"></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="privacy">
+    <div class="wrap privacy reveal">
+      <div class="eyebrow">Privacy</div>
+      <p class="statement">No account. No cloud upload. No telemetry.</p>
+      <p>Recon does not create a profile for you. It does not send footage anywhere. It does not phone home to check what you've been recording.</p>
+      <p>Every clip is written straight to a folder on your own drive. Nothing leaves your PC at any point — not during capture, not during detection, not after.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer id="download">
+  <div class="wrap">
+    <div class="eyebrow" style="justify-content:center;">Get Recon</div>
+    <h2>Free. No ads. <span class="thin">No subscription.</span></h2>
+    <p class="sub">This is a tool built to be used, not monetized. Download it, point it at Fortnite, and forget it's running until it hands you a clip.</p>
+    <!-- DEVELOPER: replace href="#" with the real download link/installer -->
+    <a href="#" class="btn big">Download Recon</a>
+
+    <!-- DEVELOPER: requirement values below are placeholders — replace with real system requirements -->
+    <div class="reqs">
+      <div><span>OS</span>Windows 10/11, 64-bit</div>
+      <div><span>Storage</span>150 MB free</div>
+      <div><span>Game</span>Fortnite (Epic or Steam)</div>
+    </div>
+
+    <p class="foot-fine">RECON — a local tool for Fortnite players</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- hero cycling text ---------- */
+  var cyclePhrases = [
+    'Auto-detects Victory Royales.',
+    '100% local — nothing leaves your PC.',
+    'Zero setup. Zero overhead.',
+    'Free. No account required.'
+  ];
+  var cycleEl = document.getElementById('cycleText');
+  var cIdx = 0;
+  if(!reduceMotion){
+    setInterval(function(){
+      cycleEl.classList.remove('in');
+      cycleEl.classList.add('out');
+      setTimeout(function(){
+        cIdx = (cIdx + 1) % cyclePhrases.length;
+        cycleEl.textContent = cyclePhrases[cIdx];
+        cycleEl.classList.remove('out');
+        cycleEl.classList.add('in');
+      }, 350);
+    }, 2800);
+  }
+
+  /* ---------- capture demo: raw timeline -> saved clips ---------- */
+  var LOOP = 9000;
+  var markerPositions = [0.15, 0.40, 0.65, 0.88];
+  var playhead = document.getElementById('playhead');
+  var markers = document.querySelectorAll('.marker');
+  var slots = document.querySelectorAll('.clip-slot');
+  var demoStarted = false;
+
+  function demoFrame(now){
+    var elapsed = now % LOOP;
+    var pct = elapsed / LOOP;
+    playhead.style.left = (pct * 100) + '%';
+    markerPositions.forEach(function(pos, i){
+      if(pct < pos){
+        markers[i].classList.remove('hit');
+        slots[i].classList.remove('filled');
+      } else if(pct >= pos && pct < pos + 0.025){
+        markers[i].classList.add('hit');
+        slots[i].classList.add('filled');
+      }
+    });
+    requestAnimationFrame(demoFrame);
+  }
+
+  function startDemo(){
+    if(demoStarted) return;
+    demoStarted = true;
+    if(reduceMotion){
+      playhead.style.left = '50%';
+      markers.forEach(function(m){ m.classList.add('hit'); });
+      slots.forEach(function(s){ s.classList.add('filled'); });
+      return;
+    }
+    requestAnimationFrame(demoFrame);
+  }
+
+  var demoModule = document.querySelector('.demo-module');
+  if('IntersectionObserver' in window){
+    var demoIo = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if(entry.isIntersecting){ startDemo(); demoIo.unobserve(entry.target); }
+      });
+    }, { threshold: 0.3 });
+    demoIo.observe(demoModule);
+  } else {
+    startDemo();
+  }
+
+  /* ---------- scroll reveal ---------- */
+  var revealEls = document.querySelectorAll('.reveal');
+  if('IntersectionObserver' in window && !reduceMotion){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if(entry.isIntersecting){ entry.target.classList.add('in'); io.unobserve(entry.target); }
+      });
+    }, { threshold: 0.15 });
+    revealEls.forEach(function(el){ io.observe(el); });
+  } else {
+    revealEls.forEach(function(el){ el.classList.add('in'); });
+  }
+
+  /* ---------- stat bars + count-up on view ---------- */
+  var statBlocks = document.querySelectorAll('.stat');
+  if('IntersectionObserver' in window){
+    var statIo = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if(entry.isIntersecting){
+          var bar = entry.target.querySelector('.bar > span');
+          bar.style.width = bar.getAttribute('data-target') + '%';
+          var numEl = entry.target.querySelector('.num .accent');
+          var final = parseFloat(numEl.getAttribute('data-final'));
+          var decimals = parseInt(numEl.getAttribute('data-decimals'), 10);
+          if(reduceMotion){
+            numEl.textContent = final.toFixed(decimals);
+          } else {
+            var start = performance.now();
+            var dur = 900;
+            (function tick(now){
+              var p = Math.min(1, (now - start) / dur);
+              var eased = 1 - Math.pow(1 - p, 3);
+              numEl.textContent = (final * eased).toFixed(decimals);
+              if(p < 1) requestAnimationFrame(tick);
+            })(start);
+          }
+          statIo.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.4 });
+    statBlocks.forEach(function(s){ statIo.observe(s); });
+  }
+})();
+</script>
+
+</body>
+</html>
